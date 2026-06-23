@@ -33,11 +33,11 @@ export async function POST(request: Request) {
     // Call the Python script
     // Note: The python script must be at /storage/emulated/0/antigravity/pdfsearchability/make_pdf_searchable_final.py
     const scriptPath = path.resolve('../make_pdf_searchable_final.py');
-    const markerApiKey = process.env.MARKER_API_KEY || ''; // If required by script env
+    const markerApiKey = process.env.DATALAB_MARKER_API || ''; // If required by script env
     
     // Execute the Python script to make the PDF searchable
     const { stdout, stderr } = await execAsync(`python3 ${scriptPath} ${inputPath} ${outputPath}`, {
-      env: { ...process.env, MARKER_API_KEY: markerApiKey }
+      env: { ...process.env, DATALAB_MARKER_API: markerApiKey }
     });
     
     console.log('Script Output:', stdout);
