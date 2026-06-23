@@ -15,6 +15,18 @@
   <h3>🚀 <a href="https://pdf-seo-platform.onrender.com/">Try the Live Demo Here</a> 🚀</h3>
 </div>
 
+## 👀 Preview the Magic (Original vs Searchable)
+
+Test it yourself! Open the PDFs below and try to select/copy the complex text.
+
+### 📐 Complex Mathematics (Determinants & Integrals)
+- ❌ **Original (Flat Image):** [Download `original_maths.pdf`](https://github.com/mha93587-beep/pdf-seo-platform/raw/main/examples/original_maths.pdf)
+- ✅ **Searchable (Raw LaTeX Embedded):** [Download `searchable_maths.pdf`](https://github.com/mha93587-beep/pdf-seo-platform/raw/main/examples/searchable_maths.pdf) *(Try selecting a matrix!)*
+
+### 🇨🇳 Chinese Typography
+- ❌ **Original (Flat Image):** [Download `original_chinese.pdf`](https://github.com/mha93587-beep/pdf-seo-platform/raw/main/examples/original_chinese.pdf)
+- ✅ **Searchable (Perfect CJK Extraction):** [Download `searchable_chinese.pdf`](https://github.com/mha93587-beep/pdf-seo-platform/raw/main/examples/searchable_chinese.pdf)
+
 <hr/>
 
 ## ✨ Features
