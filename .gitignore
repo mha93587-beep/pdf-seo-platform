@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Next.js / Node
+node_modules/
+.next/
+out/
+build/
+.env*.local
+
+# Media/PDFs
+*.pdf
+attached_assets/
+!README.md
+.env.bak
