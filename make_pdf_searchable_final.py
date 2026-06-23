@@ -300,7 +300,15 @@ def process_pdf(pdf_path, output_path, api_key):
                     textobject.setTextRenderMode(3) # 3 = Invisible
                     textobject.setTextOrigin(x0, current_y)
                     
-                    has_cjk = any('\u4e00' <= char <= '\u9fff' or '\u3040' <= char <= '\u30ff' or '\uac00' <= char <= '\ud7a3' for char in line_text)
+                    has_cjk = any(
+                        '\u4e00' <= char <= '\u9fff' or  # CJK Unified
+                        '\u3400' <= char <= '\u4dbf' or  # CJK Ext A
+                        '\u3000' <= char <= '\u303f' or  # CJK Punctuation
+                        '\uff00' <= char <= '\uffef' or  # Fullwidth Forms
+                        '\u3040' <= char <= '\u30ff' or  # Kana
+                        '\uac00' <= char <= '\ud7a3'     # Hangul
+                        for char in line_text
+                    )
                     if has_cjk:
                         if any('\u3040' <= char <= '\u30ff' for char in line_text):
                             textobject.setFont("HeiseiMin-W3", current_font_size)
