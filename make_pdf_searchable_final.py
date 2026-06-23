@@ -14,32 +14,6 @@ from dotenv import load_dotenv
 
 def latex_to_text(latex_str):
     s = latex_str.replace("\\[", "").replace("\\]", "").replace("$", "")
-    s = re.sub(r"\\frac{([^{}]+)}{([^{}]+)}", r"\1 \\\\ \2", s)
-    s = re.sub(r"\\frac", "", s)
-    replacements = {
-        r"\\times": "×",
-        r"\\dots": "...",
-        r"\\because": "∵",
-        r"\\therefore": "∴",
-        r"\\left\[": "[",
-        r"\\right\]": "]",
-        r"\\left\{": "{",
-        r"\\right\}": "}",
-        r"\\left\(": "(",
-        r"\\right\)": ")",
-        r"\\{": "{",
-        r"\\}": "}",
-        r"\\cdot": "·",
-        r"\\div": "÷",
-        r"\\quad": " ",
-        r"\\leq": "≤",
-        r"\\geq": "≥",
-        r"\\neq": "≠",
-        r"\\approx": "≈",
-        r"\\sqrt": "√",
-    }
-    for k, v in replacements.items():
-        s = re.sub(k, v, s)
     return s.strip()
 
 def process_pdf(pdf_path, output_path, api_key):
@@ -47,15 +21,32 @@ def process_pdf(pdf_path, output_path, api_key):
     headers = {"X-Api-Key": api_key}
     
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    # Register FreeSerif for massive multilingual support (Latin, Cyrillic, Indic, Arabic, etc.)
+    # Register FreeSerif for massive multilingual support
     font_path = os.path.join(BASE_DIR, 'FreeSerif.ttf')
     if not os.path.exists(font_path):
-        print(f"❌ FreeSerif.ttf not found at {font_path}! Download from: https://savannah.gnu.org/projects/freefont/")
-        # Continue without it, reportlab will fallback to default fonts, or you can exit(1) if mandatory
+        print(f"❌ FreeSerif.ttf not found! Please download it.")
     else:
         pdfmetrics.registerFont(TTFont('FreeSerif', font_path))
-    # Register CJK fonts (Built-in ReportLab CIDFonts)
-    pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light')) # Chinese
+        
+    # Register NotoSansSC for comprehensive Chinese support
+    zh_font_path = os.path.join(BASE_DIR, 'NotoSansSC-Regular.ttf')
+    if not os.path.exists(zh_font_path):
+        print(f"Downloading NotoSansSC-Regular.ttf for Chinese support...")
+        try:
+            r = requests.get('https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansSC-Regular.otf')
+            with open(zh_font_path, 'wb') as f:
+                f.write(r.content)
+            pdfmetrics.registerFont(TTFont('NotoSansSC', zh_font_path))
+        except Exception as e:
+            print(f"Failed to download NotoSansSC: {e}")
+            pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
+    else:
+        try:
+            pdfmetrics.registerFont(TTFont('NotoSansSC', zh_font_path))
+        except Exception:
+            pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
+
+    # Register other CJK fonts (Built-in ReportLab CIDFonts)
     pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3')) # Japanese
     pdfmetrics.registerFont(UnicodeCIDFont('HYSMyeongJo-Medium')) # Korean
     
@@ -318,22 +309,29 @@ def process_pdf(pdf_path, output_path, api_key):
                         '\uac00' <= char <= '\ud7a3'     # Hangul
                         for char in line_text
                     )
-                    if has_cjk:
-                        if any('\u3040' <= char <= '\u30ff' for char in line_text):
-                            textobject.setFont("HeiseiMin-W3", current_font_size)
-                        elif any('\uac00' <= char <= '\ud7a3' for char in line_text):
-                            textobject.setFont("HYSMyeongJo-Medium", current_font_size)
-                        else:
-                            textobject.setFont("STSong-Light", current_font_size)
-                        textobject.textOut(line_text + " ")
-                    else:
-                        textobject.setFont("FreeSerif", current_font_size)
-                        try:
+                    try:
+                        if has_cjk:
+                            if any('\u3040' <= char <= '\u30ff' for char in line_text):
+                                textobject.setFont("HeiseiMin-W3", current_font_size)
+                            elif any('\uac00' <= char <= '\ud7a3' for char in line_text):
+                                textobject.setFont("HYSMyeongJo-Medium", current_font_size)
+                            else:
+                                if "NotoSansSC" in pdfmetrics.getRegisteredFontNames():
+                                    textobject.setFont("NotoSansSC", current_font_size)
+                                else:
+                                    textobject.setFont("STSong-Light", current_font_size)
                             textobject.textOut(line_text + " ")
-                        except:
+                        else:
+                            textobject.setFont("FreeSerif", current_font_size)
+                            textobject.textOut(line_text + " ")
+                    except Exception as e:
+                        try:
+                            # Fallback if any character is missing in the primary font
                             textobject.setFont("Helvetica", current_font_size)
                             safe_text = line_text.encode('latin-1', 'ignore').decode('latin-1')
                             textobject.textOut(safe_text + " ")
+                        except Exception:
+                            pass
                     c.drawText(textobject)
             c.save()
             packet.seek(0)
