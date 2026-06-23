@@ -52,9 +52,10 @@ export async function POST(request: Request) {
 
     // Optionally save metadata to Supabase
     // Make sure a 'processed_pdfs' table exists in Supabase.
+    const dynamicDownloadUrl = `/api/download?file=${encodeURIComponent(b2FileName)}`;
     const { error: dbError } = await supabase.from('processed_pdfs').insert({
       original_filename: file.name,
-      b2_url: publicUrl,
+      b2_url: dynamicDownloadUrl,
       created_at: new Date().toISOString()
     });
     
@@ -66,7 +67,8 @@ export async function POST(request: Request) {
     await fs.unlink(inputPath).catch(console.error);
     await fs.unlink(outputPath).catch(console.error);
 
-    return NextResponse.json({ success: true, downloadUrl: publicUrl });
+    // Provide the dynamic download URL to the frontend so it generates a fresh signed URL when clicked
+    return NextResponse.json({ success: true, downloadUrl: dynamicDownloadUrl });
 
   } catch (error: any) {
     console.error('Error processing PDF:', error);
