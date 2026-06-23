@@ -48,7 +48,12 @@ def process_pdf(pdf_path, output_path, api_key):
     
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     # Register FreeSerif for massive multilingual support (Latin, Cyrillic, Indic, Arabic, etc.)
-    pdfmetrics.registerFont(TTFont('FreeSerif', os.path.join(BASE_DIR, 'FreeSerif.ttf')))
+    font_path = os.path.join(BASE_DIR, 'FreeSerif.ttf')
+    if not os.path.exists(font_path):
+        print(f"❌ FreeSerif.ttf not found at {font_path}! Download from: https://savannah.gnu.org/projects/freefont/")
+        # Continue without it, reportlab will fallback to default fonts, or you can exit(1) if mandatory
+    else:
+        pdfmetrics.registerFont(TTFont('FreeSerif', font_path))
     # Register CJK fonts (Built-in ReportLab CIDFonts)
     pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light')) # Chinese
     pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3')) # Japanese
@@ -249,13 +254,17 @@ def process_pdf(pdf_path, output_path, api_key):
             scale_x = width / marker_width if marker_width > 0 else 1.0
             scale_y = height / marker_height if marker_height > 0 else 1.0
             
+            page_bbox_x0 = page_bbox[0] if page_bbox and len(page_bbox) >= 4 else 0
+            page_bbox_y0 = page_bbox[1] if page_bbox and len(page_bbox) >= 4 else 0
+            
             for w in words:
                 text = w['text']
                 bbox = w['bbox']
                 
-                x0 = bbox[0] * scale_x
-                y0 = bbox[1] * scale_y
-                y1 = bbox[3] * scale_y
+                # Apply origin offset
+                x0 = (bbox[0] - page_bbox_x0) * scale_x
+                y0 = (bbox[1] - page_bbox_y0) * scale_y
+                y1 = (bbox[3] - page_bbox_y0) * scale_y
                 
                 pdf_y = height - y1
                 fontsize = y1 - y0
@@ -326,11 +335,14 @@ def process_pdf(pdf_path, output_path, api_key):
                             safe_text = line_text.encode('latin-1', 'ignore').decode('latin-1')
                             textobject.textOut(safe_text + " ")
                     c.drawText(textobject)
-        c.save()
-        packet.seek(0)
-        new_pdf = PdfReader(packet)
-        if len(new_pdf.pages) > 0:
-            page.merge_page(new_pdf.pages[0])
+            c.save()
+            packet.seek(0)
+            new_pdf = PdfReader(packet)
+            if len(new_pdf.pages) > 0:
+                page.merge_page(new_pdf.pages[0])
+        else:
+            print(f"⚠️ Page {i+1}: No OCR data found, skipping text overlay")
+            
         writer.add_page(page)
 
     with open(output_path, "wb") as output_file:
