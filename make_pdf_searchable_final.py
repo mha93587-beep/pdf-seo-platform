@@ -330,7 +330,7 @@ def process_pdf(pdf_path, output_path, api_key):
     print(f"Searchable PDF saved to: {output_path}")
 
 if __name__ == "__main__":
-    load_dotenv('/storage/emulated/0/antigravity/pdfsearchability/.env')
+    load_dotenv()
     api_key = os.environ.get('DATALAB_MARKER_API')
     if not api_key:
         print("DATALAB_MARKER_API not found in .env")
