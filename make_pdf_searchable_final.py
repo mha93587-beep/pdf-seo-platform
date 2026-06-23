@@ -46,8 +46,9 @@ def process_pdf(pdf_path, output_path, api_key):
     url = "https://www.datalab.to/api/v1/marker"
     headers = {"X-Api-Key": api_key}
     
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     # Register FreeSerif for massive multilingual support (Latin, Cyrillic, Indic, Arabic, etc.)
-    pdfmetrics.registerFont(TTFont('FreeSerif', 'FreeSerif.ttf'))
+    pdfmetrics.registerFont(TTFont('FreeSerif', os.path.join(BASE_DIR, 'FreeSerif.ttf')))
     # Register CJK fonts (Built-in ReportLab CIDFonts)
     pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light')) # Chinese
     pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3')) # Japanese
