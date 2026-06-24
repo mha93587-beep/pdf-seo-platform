@@ -92,11 +92,16 @@ export default function AuthPage() {
         router.push('/dashboard');
       }
     } else {
-      const { error } = await signUp(email, password);
+      const { data, error } = await signUp(email, password);
       if (error) {
         setError(error.message);
+      } else if (data?.session) {
+        setSuccess('Account created! Redirecting...');
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1500);
       } else {
-        setSuccess('Check your email to confirm your account.');
+        setSuccess('Account created successfully! You can now log in.');
       }
     }
     setSubmitting(false);
