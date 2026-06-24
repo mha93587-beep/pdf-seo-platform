@@ -642,14 +642,37 @@
   color: var(--text-secondary);
 }
 
-.readyBadge {
+.statusBadge {
   padding: 0.15rem 0.55rem;
   font-size: 0.72rem;
   font-weight: 600;
   border-radius: 6px;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.badgeCompleted {
   background: rgba(52, 211, 153, 0.1);
   color: #34d399;
   border: 1px solid rgba(52, 211, 153, 0.15);
+}
+
+.badgeFailed {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.badgeProcessing {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  animation: badgePulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes badgePulse {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
 }
 
 /* ── Empty State ──────────────────────────── */

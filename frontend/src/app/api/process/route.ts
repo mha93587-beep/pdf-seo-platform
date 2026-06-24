@@ -21,61 +21,93 @@ export async function POST(request: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     
-    // Create temporary paths for the python script to work on
-    const tempDir = os.tmpdir();
     const uniqueId = Date.now().toString() + Math.floor(Math.random() * 1000);
     const originalName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    const inputPath = path.join(tempDir, `input_${uniqueId}_${originalName}`);
-    const outputPath = path.join(tempDir, `output_${uniqueId}_${originalName}`);
     
-    // Save the uploaded file temporarily
-    await fs.writeFile(inputPath, buffer);
+    // 1. Upload original PDF to B2
+    const originalB2FileName = `original_${uniqueId}_${originalName}`;
+    await uploadToB2(buffer, originalB2FileName, file.type || 'application/pdf');
+    const originalB2Url = `/api/download?file=${encodeURIComponent(originalB2FileName)}`;
 
-    // Call the Python script
-    // Note: The python script must be at /storage/emulated/0/antigravity/pdfsearchability/make_pdf_searchable_final.py
-    const scriptPath = path.resolve('../make_pdf_searchable_final.py');
-    const markerApiKey = process.env.DATALAB_MARKER_API || ''; // If required by script env
+    // 2. Insert record in Supabase with 'processing' status
+    const { data: dbData, error: dbError } = await supabase
+      .from('processed_pdfs')
+      .insert({
+        original_filename: file.name,
+        b2_url: null,
+        original_b2_url: originalB2Url,
+        status: 'processing',
+        created_at: new Date().toISOString(),
+        user_id: userId || null
+      })
+      .select()
+      .single();
     
-    // Execute the Python script to make the PDF searchable
-    const { stdout, stderr } = await execAsync(`python3 ${scriptPath} ${inputPath} ${outputPath}`, {
-      env: { ...process.env, DATALAB_MARKER_API: markerApiKey }
-    });
-    
-    console.log('Script Output:', stdout);
-    if (stderr) console.error('Script Stderr:', stderr);
-
-    // Read the processed PDF
-    const processedBuffer = await fs.readFile(outputPath);
-
-    // Upload to Backblaze B2
-    const b2FileName = `optimized_${uniqueId}_${originalName}`;
-    const publicUrl = await uploadToB2(processedBuffer, b2FileName, 'application/pdf');
-
-    // Optionally save metadata to Supabase
-    // Make sure a 'processed_pdfs' table exists in Supabase.
-    const dynamicDownloadUrl = `/api/download?file=${encodeURIComponent(b2FileName)}`;
-    const { error: dbError } = await supabase.from('processed_pdfs').insert({
-      original_filename: file.name,
-      b2_url: dynamicDownloadUrl,
-      created_at: new Date().toISOString(),
-      user_id: userId || null
-    });
-    
-    if (dbError) {
-      console.warn('Could not save to Supabase. Make sure table processed_pdfs exists.', dbError);
+    if (dbError || !dbData) {
+      console.error('Could not save to Supabase:', dbError);
+      return NextResponse.json({ error: 'Database record creation failed', details: dbError?.message }, { status: 500 });
     }
 
-    // Clean up temporary files
-    await fs.unlink(inputPath).catch(console.error);
-    await fs.unlink(outputPath).catch(console.error);
+    // 3. Start processing in the background (asynchronously, do not await!)
+    (async () => {
+      const tempDir = os.tmpdir();
+      const inputPath = path.join(tempDir, `input_${uniqueId}_${originalName}`);
+      const outputPath = path.join(tempDir, `output_${uniqueId}_${originalName}`);
+      
+      try {
+        // Save the uploaded file temporarily
+        await fs.writeFile(inputPath, buffer);
 
-    // Provide the dynamic download URL to the frontend so it generates a fresh signed URL when clicked
-    return NextResponse.json({ success: true, downloadUrl: dynamicDownloadUrl });
+        // Call the Python script
+        const scriptPath = path.resolve('../make_pdf_searchable_final.py');
+        const markerApiKey = process.env.DATALAB_MARKER_API || '';
+        
+        await execAsync(`python3 ${scriptPath} ${inputPath} ${outputPath}`, {
+          env: { ...process.env, DATALAB_MARKER_API: markerApiKey }
+        });
+        
+        // Read the processed PDF
+        const processedBuffer = await fs.readFile(outputPath);
+
+        // Upload optimized PDF to B2
+        const b2FileName = `optimized_${uniqueId}_${originalName}`;
+        await uploadToB2(processedBuffer, b2FileName, 'application/pdf');
+        const dynamicDownloadUrl = `/api/download?file=${encodeURIComponent(b2FileName)}`;
+
+        // Update database record to 'completed'
+        await supabase
+          .from('processed_pdfs')
+          .update({
+            b2_url: dynamicDownloadUrl,
+            status: 'completed'
+          })
+          .eq('id', dbData.id);
+
+      } catch (error: any) {
+        console.error(`Background processing failed for ID ${dbData.id}:`, error);
+        
+        // Update database record to 'failed'
+        await supabase
+          .from('processed_pdfs')
+          .update({
+            status: 'failed'
+          })
+          .eq('id', dbData.id);
+          
+      } finally {
+        // Clean up temporary files
+        await fs.unlink(inputPath).catch(() => {});
+        await fs.unlink(outputPath).catch(() => {});
+      }
+    })();
+
+    // 4. Return success immediately with the new record ID
+    return NextResponse.json({ success: true, id: dbData.id });
 
   } catch (error: any) {
-    console.error('Error processing PDF:', error);
+    console.error('Error initiating PDF processing:', error);
     return NextResponse.json(
-      { error: 'Failed to process PDF', details: error.message },
+      { error: 'Failed to initiate PDF processing', details: error.message },
       { status: 500 }
     );
   }

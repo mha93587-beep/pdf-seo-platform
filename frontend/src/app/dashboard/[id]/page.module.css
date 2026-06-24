@@ -143,9 +143,113 @@
   font-size: 0.75rem;
   font-weight: 600;
   border-radius: 6px;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.badgeCompleted {
   background: rgba(52, 211, 153, 0.1);
   color: #34d399;
   border: 1px solid rgba(52, 211, 153, 0.15);
+}
+
+.badgeFailed {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.badgeProcessing {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  animation: badgePulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes badgePulse {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+/* ── Processing Wrapper ── */
+.processingWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 2.5rem 2rem;
+  margin-bottom: 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+}
+
+.pulseRingContainer {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pulseRing {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(56, 189, 248, 0.25);
+  animation: ringExpand 3s ease-out infinite;
+  width: 60px;
+  height: 60px;
+}
+
+.pulseRing:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.pulseRing:nth-child(2) {
+  animation-delay: 1s;
+  border-color: rgba(129, 140, 248, 0.2);
+}
+
+.pulseRing:nth-child(3) {
+  animation-delay: 2s;
+  border-color: rgba(56, 189, 248, 0.15);
+}
+
+@keyframes ringExpand {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.brainEmoji {
+  font-size: 2.2rem;
+  z-index: 2;
+  animation: brainPulse 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 15px rgba(56, 189, 248, 0.3));
+}
+
+@keyframes brainPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.statusText {
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  min-height: 1.5em;
 }
 
 /* ── Download Cards Grid ────────────────── */

@@ -10,7 +10,9 @@ import styles from './page.module.css';
 interface ProcessedPdf {
   id: number;
   original_filename: string;
-  b2_url: string;
+  b2_url: string | null;
+  original_b2_url: string | null;
+  status: string;
   created_at: string;
   user_id: string | null;
 }
@@ -41,32 +43,22 @@ function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + '...' : str;
 }
 
-const STATUS_MESSAGES = [
-  '🧠 AI is analyzing your document...',
-  '📐 Extracting mathematical equations...',
-  '🔤 Recognizing multilingual text...',
-  '✨ Embedding invisible search layer...',
-  '🎯 Optimizing for perfection...',
-];
-
 /* ── Dashboard Content ──────────────────────── */
 function DashboardContent() {
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Upload state
+  // Upload card state
   const [activeTab, setActiveTab] = useState<'file' | 'url'>('file');
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState('');
   const [isDragging, setIsDragging] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  
+  // Submit state
+  const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-
-  // Processing animation
-  const [statusMsgIndex, setStatusMsgIndex] = useState(0);
-  const [statusFading, setStatusFading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Recent PDFs
   const [pdfs, setPdfs] = useState<ProcessedPdf[]>([]);
@@ -82,32 +74,31 @@ function DashboardContent() {
   // Fetch recent PDFs
   const fetchPdfs = useCallback(async () => {
     if (!user) return;
-    setPdfsLoading(true);
     const { data } = await supabaseBrowser
       .from('processed_pdfs')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    setPdfs(data || []);
+    setPdfs((data as ProcessedPdf[]) || []);
     setPdfsLoading(false);
   }, [user]);
 
   useEffect(() => {
-    if (user) fetchPdfs();
+    if (user) {
+      fetchPdfs();
+    }
   }, [user, fetchPdfs]);
 
-  // Rotating status messages during processing
+  // Auto-refresh: Poll if any items are in 'processing' status
   useEffect(() => {
-    if (status !== 'processing') return;
-    const interval = setInterval(() => {
-      setStatusFading(true);
-      setTimeout(() => {
-        setStatusMsgIndex((prev) => (prev + 1) % STATUS_MESSAGES.length);
-        setStatusFading(false);
-      }, 400);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [status]);
+    const hasProcessing = pdfs.some((pdf) => pdf.status === 'processing');
+    if (hasProcessing) {
+      const interval = setInterval(() => {
+        fetchPdfs();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [pdfs, fetchPdfs]);
 
   // Drag & drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -140,9 +131,9 @@ function DashboardContent() {
   // Process file upload
   const processFile = async () => {
     if (!file) return;
-    setStatus('processing');
+    setSubmitting(true);
     setErrorMessage('');
-    setStatusMsgIndex(0);
+    setSuccessMessage('');
 
     try {
       const formData = new FormData();
@@ -155,22 +146,28 @@ function DashboardContent() {
       });
 
       if (!res.ok) throw new Error('Processing failed');
-      const data = await res.json();
-      setDownloadUrl(data.downloadUrl);
-      setStatus('done');
-      fetchPdfs();
+      
+      setFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setSuccessMessage('PDF submitted successfully! You can track progress in the history below.');
+      
+      // Instantly refresh list to show the 'processing' order card
+      await fetchPdfs();
     } catch {
-      setStatus('error');
-      setErrorMessage('Failed to process PDF. Please try again.');
+      setErrorMessage('Failed to submit PDF. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   // Process URL
   const processUrl = async () => {
     if (!url.trim()) return;
-    setStatus('processing');
+    setSubmitting(true);
     setErrorMessage('');
-    setStatusMsgIndex(0);
+    setSuccessMessage('');
 
     try {
       const res = await fetch('/api/process-url', {
@@ -180,24 +177,17 @@ function DashboardContent() {
       });
 
       if (!res.ok) throw new Error('Processing failed');
-      const data = await res.json();
-      setDownloadUrl(data.downloadUrl);
-      setStatus('done');
-      fetchPdfs();
+      
+      setUrl('');
+      setSuccessMessage('URL submitted successfully! You can track progress in the history below.');
+      
+      // Instantly refresh list to show the 'processing' order card
+      await fetchPdfs();
     } catch {
-      setStatus('error');
       setErrorMessage('Failed to process PDF from URL. Please check the URL and try again.');
+    } finally {
+      setSubmitting(false);
     }
-  };
-
-  // Reset state
-  const resetState = () => {
-    setFile(null);
-    setUrl('');
-    setStatus('idle');
-    setDownloadUrl(null);
-    setErrorMessage('');
-    setStatusMsgIndex(0);
   };
 
   // Logout
@@ -241,133 +231,115 @@ function DashboardContent() {
 
         {/* ── Upload Card ───────────── */}
         <div className={styles.uploadCard}>
-          {status === 'idle' || status === 'error' ? (
+          {/* Tabs */}
+          <div className={styles.tabs}>
+            <button
+              className={`${styles.tab} ${activeTab === 'file' ? styles.tabActive : ''}`}
+              disabled={submitting}
+              onClick={() => {
+                setActiveTab('file');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
+            >
+              📁 Upload File
+            </button>
+            <button
+              className={`${styles.tab} ${activeTab === 'url' ? styles.tabActive : ''}`}
+              disabled={submitting}
+              onClick={() => {
+                setActiveTab('url');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
+            >
+              🔗 Paste URL
+            </button>
+          </div>
+
+          {activeTab === 'file' ? (
             <>
-              {/* Tabs */}
-              <div className={styles.tabs}>
-                <button
-                  className={`${styles.tab} ${activeTab === 'file' ? styles.tabActive : ''}`}
-                  onClick={() => setActiveTab('file')}
-                >
-                  📁 Upload File
-                </button>
-                <button
-                  className={`${styles.tab} ${activeTab === 'url' ? styles.tabActive : ''}`}
-                  onClick={() => setActiveTab('url')}
-                >
-                  🔗 Paste URL
-                </button>
-              </div>
-
-              {activeTab === 'file' ? (
-                <>
-                  <div
-                    className={`${styles.dropZone} ${isDragging ? styles.dropZoneDragging : ''} ${file ? styles.fileSelected : ''}`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      ref={fileInputRef}
-                      onChange={handleFileChange}
-                      className={styles.hiddenInput}
-                    />
-                    <span className={styles.dropIcon}>
-                      {file ? '📄' : '📂'}
-                    </span>
-                    <p className={styles.dropTitle}>
-                      {file ? file.name : 'Drag & Drop your PDF here'}
-                    </p>
-                    <p className={styles.dropSubtext}>
-                      {file
-                        ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                        : 'or click to browse from your computer'}
-                    </p>
-                    {file && (
-                      <p className={styles.fileName}>
-                        ✓ File selected
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    className={styles.processBtn}
-                    disabled={!file}
-                    onClick={processFile}
-                  >
-                    Process PDF
-                  </button>
-                </>
-              ) : (
-                <div className={styles.urlInputContainer}>
-                  <input
-                    type="url"
-                    className={styles.urlInput}
-                    placeholder="https://example.com/document.pdf"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                  />
-                  <button
-                    className={styles.processBtn}
-                    disabled={!url.trim()}
-                    onClick={processUrl}
-                  >
-                    Process URL
-                  </button>
-                </div>
-              )}
-
-              {status === 'error' && errorMessage && (
-                <div className={styles.errorMsg}>{errorMessage}</div>
-              )}
-            </>
-          ) : status === 'processing' ? (
-            /* ── Processing Animation ── */
-            <div className={styles.processingContainer}>
-              <div className={styles.processingGlow} />
-              <div className={styles.pulseRingContainer}>
-                <div className={styles.pulseRing} />
-                <div className={styles.pulseRing} />
-                <div className={styles.pulseRing} />
-                <span className={styles.brainEmoji}>🧠</span>
-              </div>
-              <p
-                className={`${styles.statusText} ${
-                  statusFading ? styles.statusTextFading : styles.statusTextVisible
-                }`}
+              <div
+                className={`${styles.dropZone} ${isDragging ? styles.dropZoneDragging : ''} ${file ? styles.fileSelected : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => !submitting && fileInputRef.current?.click()}
+                style={{ cursor: submitting ? 'not-allowed' : 'pointer' }}
               >
-                {STATUS_MESSAGES[statusMsgIndex]}
-              </p>
-              <div className={styles.shimmerBar}>
-                <div className={styles.shimmerBarInner} />
+                <input
+                  type="file"
+                  accept=".pdf"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  disabled={submitting}
+                  className={styles.hiddenInput}
+                />
+                <span className={styles.dropIcon}>
+                  {file ? '📄' : '📂'}
+                </span>
+                <p className={styles.dropTitle}>
+                  {file ? file.name : 'Drag & Drop your PDF here'}
+                </p>
+                <p className={styles.dropSubtext}>
+                  {file
+                    ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
+                    : 'or click to browse from your computer'}
+                </p>
+                {file && (
+                  <p className={styles.fileName}>
+                    ✓ File selected
+                  </p>
+                )}
               </div>
+              <button
+                className={styles.processBtn}
+                disabled={!file || submitting}
+                onClick={processFile}
+              >
+                {submitting ? 'Submitting PDF...' : 'Process PDF'}
+              </button>
+            </>
+          ) : (
+            <div className={styles.urlInputContainer}>
+              <input
+                type="url"
+                className={styles.urlInput}
+                placeholder="https://example.com/document.pdf"
+                value={url}
+                disabled={submitting}
+                onChange={(e) => setUrl(e.target.value)}
+              />
+              <button
+                className={styles.processBtn}
+                disabled={!url.trim() || submitting}
+                onClick={processUrl}
+              >
+                {submitting ? 'Submitting URL...' : 'Process URL'}
+              </button>
             </div>
-          ) : status === 'done' ? (
-            /* ── Success State ────────── */
-            <div className={styles.successContainer}>
-              <span className={styles.successIcon}>✅</span>
-              <h2 className={styles.successTitle}>Your PDF is ready!</h2>
-              <p className={styles.successSub}>
-                Your document has been enhanced with an invisible searchable text layer.
-              </p>
-              <div className={styles.successActions}>
-                <a
-                  href={downloadUrl || '#'}
-                  className={styles.downloadBtn}
-                >
-                  ⬇ Download Searchable PDF
-                </a>
-                <button className={styles.resetBtn} onClick={resetState}>
-                  Process Another
-                </button>
-              </div>
+          )}
+
+          {errorMessage && (
+            <div className={styles.errorMsg}>{errorMessage}</div>
+          )}
+
+          {successMessage && (
+            <div style={{
+              marginTop: '0.75rem',
+              padding: '0.7rem 1rem',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(52,211,153,0.1)',
+              border: '1px solid rgba(52,211,153,0.2)',
+              color: '#a7f3d0',
+              fontSize: '0.85rem'
+            }}>
+              {successMessage}
             </div>
-          ) : null}
+          )}
         </div>
 
-        {/* ── Recent PDFs ───────────── */}
+        {/* ── Recent PDFs / History ──── */}
         <section className={styles.recentSection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Your Processed PDFs</h2>
@@ -403,7 +375,20 @@ function DashboardContent() {
                     <span className={styles.pdfCardTime}>
                       {relativeTime(pdf.created_at)}
                     </span>
-                    <span className={styles.readyBadge}>Ready ✓</span>
+                    
+                    {pdf.status === 'processing' ? (
+                      <span className={`${styles.statusBadge} ${styles.badgeProcessing}`}>
+                        ⚙ Processing...
+                      </span>
+                    ) : pdf.status === 'failed' ? (
+                      <span className={`${styles.statusBadge} ${styles.badgeFailed}`}>
+                        ❌ Failed
+                      </span>
+                    ) : (
+                      <span className={`${styles.statusBadge} ${styles.badgeCompleted}`}>
+                        Ready ✓
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

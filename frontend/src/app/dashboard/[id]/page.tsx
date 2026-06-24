@@ -10,50 +10,83 @@ import styles from './page.module.css';
 interface ProcessedPdf {
   id: number;
   original_filename: string;
-  b2_url: string;
+  b2_url: string | null;
+  original_b2_url: string | null;
+  status: string;
   created_at: string;
   user_id: string | null;
 }
+
+const STATUS_MESSAGES = [
+  '🧠 AI is analyzing your document...',
+  '📐 Extracting mathematical equations...',
+  '🔤 Recognizing multilingual text...',
+  '✨ Embedding invisible search layer...',
+  '🎯 Optimizing for perfection...',
+];
 
 /* ── Detail Content ─────────────────────────── */
 function DetailContent() {
   const router = useRouter();
   const params = useParams();
   const { user, loading, signOut } = useAuth();
+  
   const [pdf, setPdf] = useState<ProcessedPdf | null>(null);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // Auth guard
+  // Status message rotation
+  const [statusMsgIndex, setStatusMsgIndex] = useState(0);
+
+  // Fetch PDF details helper
+  const fetchPdf = async () => {
+    if (!user || !params.id) return;
+    const { data, error: dbError } = await supabaseBrowser
+      .from('processed_pdfs')
+      .select('*')
+      .eq('id', params.id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (dbError || !data) {
+      setError(true);
+    } else {
+      setPdf(data as ProcessedPdf);
+    }
+    setFetchLoading(false);
+  };
+
+  // Auth guard and initial fetch
   useEffect(() => {
     if (!loading && !user) {
       router.push('/auth');
     }
   }, [user, loading, router]);
 
-  // Fetch PDF details
   useEffect(() => {
-    async function fetchPdf() {
-      if (!user || !params.id) return;
-      setFetchLoading(true);
-
-      const { data, error: dbError } = await supabaseBrowser
-        .from('processed_pdfs')
-        .select('*')
-        .eq('id', params.id)
-        .eq('user_id', user.id)
-        .single();
-
-      if (dbError || !data) {
-        setError(true);
-      } else {
-        setPdf(data as ProcessedPdf);
-      }
-      setFetchLoading(false);
+    if (user) {
+      fetchPdf();
     }
-
-    if (user) fetchPdf();
   }, [user, params.id]);
+
+  // Auto-refresh: Poll if status is 'processing'
+  useEffect(() => {
+    if (pdf?.status === 'processing') {
+      const interval = setInterval(() => {
+        fetchPdf();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [pdf?.status]);
+
+  // Rotate status messages during processing
+  useEffect(() => {
+    if (pdf?.status !== 'processing') return;
+    const msgInterval = setInterval(() => {
+      setStatusMsgIndex((prev) => (prev + 1) % STATUS_MESSAGES.length);
+    }, 3000);
+    return () => clearInterval(msgInterval);
+  }, [pdf?.status]);
 
   const handleLogout = async () => {
     await signOut();
@@ -132,9 +165,37 @@ function DetailContent() {
             <span className={styles.metaItem}>
               🕐 {formatDate(pdf.created_at)}
             </span>
-            <span className={styles.statusBadge}>Ready ✓</span>
+            
+            {pdf.status === 'processing' ? (
+              <span className={`${styles.statusBadge} ${styles.badgeProcessing}`}>
+                ⚙ Processing...
+              </span>
+            ) : pdf.status === 'failed' ? (
+              <span className={`${styles.statusBadge} ${styles.badgeFailed}`}>
+                ❌ Failed
+              </span>
+            ) : (
+              <span className={`${styles.statusBadge} ${styles.badgeCompleted}`}>
+                Ready ✓
+              </span>
+            )}
           </div>
         </div>
+
+        {/* ── Processing Animation ── */}
+        {pdf.status === 'processing' && (
+          <div className={styles.processingWrapper}>
+            <div className={styles.pulseRingContainer}>
+              <div className={styles.pulseRing} />
+              <div className={styles.pulseRing} />
+              <div className={styles.pulseRing} />
+              <span className={styles.brainEmoji}>🧠</span>
+            </div>
+            <p className={styles.statusText}>
+              {STATUS_MESSAGES[statusMsgIndex]}
+            </p>
+          </div>
+        )}
 
         {/* ── Download Cards ─────── */}
         <div className={styles.downloadGrid}>
@@ -145,9 +206,18 @@ function DetailContent() {
             <p className={styles.cardDesc}>
               The original document as uploaded, without searchable text enhancements.
             </p>
-            <span className={`${styles.cardBtn} ${styles.cardBtnOutline}`}>
-              Original not available
-            </span>
+            {pdf.original_b2_url ? (
+              <a
+                href={pdf.original_b2_url}
+                className={`${styles.cardBtn} ${styles.cardBtnOutline}`}
+              >
+                ⬇ Download Original
+              </a>
+            ) : (
+              <span className={`${styles.cardBtn} ${styles.cardBtnOutline}`} style={{ opacity: 0.5, cursor: 'not-allowed' }}>
+                Original not available
+              </span>
+            )}
           </div>
 
           {/* Searchable PDF */}
@@ -157,12 +227,22 @@ function DetailContent() {
             <p className={styles.cardDesc}>
               Enhanced with an invisible text layer — fully searchable, selectable, and SEO-optimized.
             </p>
-            <a
-              href={pdf.b2_url}
-              className={`${styles.cardBtn} ${styles.cardBtnPrimary}`}
-            >
-              ⬇ Download
-            </a>
+            {pdf.status === 'completed' && pdf.b2_url ? (
+              <a
+                href={pdf.b2_url}
+                className={`${styles.cardBtn} ${styles.cardBtnPrimary}`}
+              >
+                ⬇ Download
+              </a>
+            ) : pdf.status === 'failed' ? (
+              <span className={`${styles.cardBtn} ${styles.cardBtnOutline}`} style={{ borderColor: 'rgba(239,68,68,0.3)', color: '#fca5a5', cursor: 'not-allowed' }}>
+                ❌ Processing Failed
+              </span>
+            ) : (
+              <span className={`${styles.cardBtn} ${styles.cardBtnPrimary}`} style={{ opacity: 0.7, cursor: 'wait' }}>
+                ⚙ Processing...
+              </span>
+            )}
           </div>
         </div>
       </div>
