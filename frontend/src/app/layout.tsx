@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { AuthProvider } from '@/lib/auth-context';
 
 export const metadata: Metadata = {
-  title: 'DocuSEO - Make Your PDFs 100% Searchable',
-  description: 'Boost your SEO by making your PDF documents completely indexable by Google. Our smart AI extracts text perfectly and embeds it without duplicating existing content.',
-  keywords: 'PDF, SEO, searchable PDF, OCR, text extraction, Google indexing, optimize PDF',
+  title: 'DocuSEO – AI-Powered Searchable PDF Platform',
+  description:
+    'Transform scanned PDFs into searchable, selectable documents. Supports mathematical equations (LaTeX), Chinese, Japanese, Korean, Hindi, and 50+ languages. Free AI-powered OCR.',
+  keywords:
+    'searchable PDF, selectable PDF, PDF OCR, AI PDF processing, LaTeX math extraction, CJK PDF, make PDF searchable, PDF SEO',
 };
 
 export default function RootLayout({
@@ -15,7 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

@@ -13,6 +13,7 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const userId = formData.get('userId') as string | null;
     
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -56,7 +57,8 @@ export async function POST(request: Request) {
     const { error: dbError } = await supabase.from('processed_pdfs').insert({
       original_filename: file.name,
       b2_url: dynamicDownloadUrl,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      user_id: userId || null
     });
     
     if (dbError) {
